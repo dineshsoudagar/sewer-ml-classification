@@ -1,5 +1,5 @@
 # Sewer-ML: A Multi-Label Sewer Defect Classification Dataset and Benchmark
-
+The Repository is forked from actual repo: https://bitbucket.org/aauvap/sewer-ml.git. For participating in a competition.
 This repository is the official implementation of [A Multi-Label Sewer Defect Classification Dataset and Benchmark](https://openaccess.thecvf.com/content/CVPR2021/html/Haurum_Sewer-ML_A_Multi-Label_Sewer_Defect_Classification_Dataset_and_Benchmark_CVPR_2021_paper.html). 
 
 
