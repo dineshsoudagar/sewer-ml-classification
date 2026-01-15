@@ -1,0 +1,34 @@
+seed: 42
+
+labels: ["RB","OB","PF","DE","FS","IS","RO","IN","AF","BE","FO","GR","PH","PB","OS","OP","OK","VA","ND"]
+
+model_name: "vit_large_patch16_dinov3.lvd1689m"   # DINOv3 ViT-L/16 in timm :contentReference[oaicite:2]{index=2}
+img_size: 256
+
+train_batch_size: 32
+val_batch_size: 32
+num_workers: 8
+
+epochs: 8
+lr: 3.0e-5
+weight_decay: 0.05
+warmup_epochs: 1
+
+use_amp: true
+grad_accum_steps: 1
+clip_grad_norm: 1.0
+
+# For class imbalance: compute pos_weight from train labels
+use_pos_weight: true
+
+# Thresholding
+threshold_strategy: "per_class"   # per_class or global
+threshold_steps: 200              # threshold grid resolution
+
+
+eval_every_epochs: 1           # evaluate every N epochs
+monitor: "macro_f1"            # "macro_f1" or "micro_f1"
+early_stopping_patience: 3     # stop if no improvement for this many evals
+min_delta: 0.0001              # minimum improvement to reset patience
+save_all_checkpoints: true     # if false, keep only best + last
+max_keep: 5                    # if save_all_checkpoints=false, keep up to N best
