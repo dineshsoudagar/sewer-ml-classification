@@ -47,6 +47,7 @@ Thumbs.db
 *.flv
 *.mov
 *.wmv
+*.pt
 
 /hugging_face_dinov3/multi-label-model-val-test/checkpoint-2032/optimizer.pt
 /checkpoint-*
