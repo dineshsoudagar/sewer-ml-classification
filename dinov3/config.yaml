@@ -9,20 +9,20 @@ train_batch_size: 32
 val_batch_size: 32
 num_workers: 8
 
-epochs: 8
-lr: 3.0e-5
+epochs: 10
+lr: 1.0e-4
 weight_decay: 0.05
 warmup_epochs: 1
 
-use_amp: true
+use_amp: false
 grad_accum_steps: 1
 clip_grad_norm: 1.0
 
 # For class imbalance: compute pos_weight from train labels
-use_pos_weight: true
+use_pos_weight: false
 
 # Thresholding
-threshold_strategy: "per_class"   # per_class or global
+threshold_strategy: "global"   # per_class or global
 threshold_steps: 200              # threshold grid resolution
 
 

@@ -19,6 +19,7 @@ import torchvision.transforms.functional as TF
 from dataset import SewerMLDataset
 from model import DinoV3MultiLabel
 from metrics import search_thresholds, f1_from_thresholds
+from dataset_balanced import SewerMLBalancedDataset
 
 import random
 import torch
@@ -179,9 +180,29 @@ def main():
     train_tf = SimpleTransform(cfg["img_size"], train=True, rotate_degrees=(0, 90, 180))
     val_tf = SimpleTransform(cfg["img_size"], train=False)
 
-    train_ds = SewerMLDataset(args.train_csv, args.train_images, labels, transform=train_tf)
-    val_ds = SewerMLDataset(args.val_csv, args.val_images, labels, transform=val_tf)
+    #train_ds = SewerMLDataset(args.train_csv, args.train_images, labels, transform=train_tf)
+    #val_ds = SewerMLDataset(args.val_csv, args.val_images, labels, transform=val_tf)
+    train_ds = SewerMLBalancedDataset(
+        csv_path=args.val_csv,  # same
+        images_dir=args.val_images,  # same
+        labels=labels,
+        transform=train_tf,
+        use_balanced_subset=True,
+        subset_size=5000,  # recommended
+        min_pos_per_class=200,  # good default
+        seed=cfg["seed"],
+    )
 
+    val_ds = SewerMLBalancedDataset(
+        csv_path=args.val_csv,
+        images_dir=args.val_images,
+        labels=labels,
+        transform=val_tf,
+        use_balanced_subset=True,
+        subset_size=5000,  # keep same subset for evaluation
+        min_pos_per_class=200,
+        seed=cfg["seed"],
+    )
     train_loader = DataLoader(
         train_ds,
         batch_size=cfg["train_batch_size"],
@@ -245,9 +266,9 @@ def main():
             scaler.scale(loss).backward()
 
             if step % grad_accum == 0:
-                if cfg.get("clip_grad_norm", 0.0) and cfg["clip_grad_norm"] > 0:
-                    scaler.unscale_(optimizer)
-                    torch.nn.utils.clip_grad_norm_(model.parameters(), cfg["clip_grad_norm"])
+                #if cfg.get("clip_grad_norm", 0.0) and cfg["clip_grad_norm"] > 0:
+                #    scaler.unscale_(optimizer)
+                #    torch.nn.utils.clip_grad_norm_(model.parameters(), cfg["clip_grad_norm"])
 
                 scaler.step(optimizer)
                 scaler.update()
