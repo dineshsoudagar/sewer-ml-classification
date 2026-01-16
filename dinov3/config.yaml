@@ -2,7 +2,9 @@ seed: 42
 
 labels: ["RB","OB","PF","DE","FS","IS","RO","IN","AF","BE","FO","GR","PH","PB","OS","OP","OK","VA","ND"]
 
-model_name: "vit_large_patch16_dinov3.lvd1689m"   # DINOv3 ViT-L/16 in timm :contentReference[oaicite:2]{index=2}
+model_name: "vit_base_patch16_dinov3.lvd1689m"   # DINOv3 ViT-L/16 in timm :contentReference[oaicite:2]{index=2}
+freeze_backbone: false
+freeze_layers: false
 img_size: 256
 
 train_batch_size: 32

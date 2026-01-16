@@ -221,7 +221,9 @@ def main():
 
     # Model
     model = DinoV3MultiLabel(cfg["model_name"], num_classes=len(labels), pretrained=True).to(device)
-
+    if cfg["freeze_backbone"]:
+        for p in model.backbone.parameters():
+            p.requires_grad = False
     # Loss
     if cfg.get("use_pos_weight", True):
         pos_weight = compute_pos_weight(args.train_csv, labels).to(device)

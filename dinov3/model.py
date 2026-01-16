@@ -19,3 +19,8 @@ class DinoV3MultiLabel(nn.Module):
         feats = self.backbone(x)
         logits = self.head(feats)
         return logits
+
+
+if __name__ == "__main__":
+    model = DinoV3MultiLabel(model_name="vit_large_patch16_dinov3.lvd1689m", num_classes=19)
+    print(model)
