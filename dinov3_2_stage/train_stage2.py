@@ -19,12 +19,12 @@ from train_utils import (
 # -------------------------
 # Training Config
 # -------------------------
-TRAIN_CSV    = r"D:\expandAI-hiring\expandai-hiring-sewer\train_stage2_sanity_5k.csv"
-VAL_CSV      = r"D:\expandAI-hiring\expandai-hiring-sewer\train_stage2_sanity_5k.csv"
+TRAIN_CSV = r"D:\expandAI-hiring\expandai-hiring-sewer\train.csv"
+VAL_CSV = r"D:\expandAI-hiring\expandai-hiring-sewer\SewerML_Val_jpg.csv"
 TRAIN_IMAGES = r"D:\expandAI-hiring\expandai-hiring-sewer\train_images"
-VAL_IMAGES   = r"D:\expandAI-hiring\expandai-hiring-sewer\train_images"
+VAL_IMAGES = r"D:\expandAI-hiring\expandai-hiring-sewer\test_images"
 
-OUT_DIR = "outputs_stage2_vit_base_tesk_5k"
+OUT_DIR = "outputs_stage2_vit_base"
 
 MODEL_NAME = "vit_base_patch16_dinov3.lvd1689m"
 RESUME_CKPT = None  # e.g. r"outputs_stage2_vit_base_tesk_5k\best.pt"
@@ -32,7 +32,8 @@ RESUME_CKPT = None  # e.g. r"outputs_stage2_vit_base_tesk_5k\best.pt"
 DEFECT_ONLY = False  # stage2 must be False
 SEED = 42
 
-LABELS = ["RB","OB","PF","DE","FS","IS","RO","IN","AF","BE","FO","GR","PH","PB","OS","OP","OK","VA","ND"]
+LABELS = ["RB", "OB", "PF", "DE", "FS", "IS", "RO", "IN", "AF", "BE", "FO", "GR", "PH", "PB", "OS", "OP", "OK", "VA",
+          "ND"]
 ND_LABEL = "ND"
 LABELS_WO_ND = [l for l in LABELS if l != ND_LABEL]
 NUM_CLASSES = len(LABELS_WO_ND)
@@ -68,7 +69,7 @@ SAVE_ALL_CHECKPOINTS = True
 MAX_KEEP = 5
 
 SEWER_MEAN = [0.523, 0.453, 0.345]
-SEWER_STD  = [0.210, 0.199, 0.154]
+SEWER_STD = [0.210, 0.199, 0.154]
 
 
 def compute_pos_weight_defects(train_csv: str, labels_wo_nd, nd_label: str, clamp: float) -> torch.Tensor:
@@ -88,17 +89,17 @@ def main():
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
 
-    train_tf = SimpleTransform(IMG_SIZE, train=True,  SEWER_MEAN=SEWER_MEAN, SEWER_STD=SEWER_STD)
-    val_tf   = SimpleTransform(IMG_SIZE, train=False, SEWER_MEAN=SEWER_MEAN, SEWER_STD=SEWER_STD)
+    train_tf = SimpleTransform(IMG_SIZE, train=True, SEWER_MEAN=SEWER_MEAN, SEWER_STD=SEWER_STD)
+    val_tf = SimpleTransform(IMG_SIZE, train=False, SEWER_MEAN=SEWER_MEAN, SEWER_STD=SEWER_STD)
 
     # dataset handles ND filtering and ND column removal when defect_only=False
     train_ds = SewerMLDataset(TRAIN_CSV, TRAIN_IMAGES, LABELS, transform=train_tf, defect_only=DEFECT_ONLY)
-    val_ds   = SewerMLDataset(VAL_CSV,   VAL_IMAGES,   LABELS, transform=val_tf,   defect_only=DEFECT_ONLY)
+    val_ds = SewerMLDataset(VAL_CSV, VAL_IMAGES, LABELS, transform=val_tf, defect_only=DEFECT_ONLY)
 
     train_loader = DataLoader(train_ds, batch_size=TRAIN_BATCH_SIZE, shuffle=True,
                               num_workers=NUM_WORKERS, pin_memory=True, drop_last=True)
-    val_loader   = DataLoader(val_ds, batch_size=VAL_BATCH_SIZE, shuffle=False,
-                              num_workers=NUM_WORKERS, pin_memory=True)
+    val_loader = DataLoader(val_ds, batch_size=VAL_BATCH_SIZE, shuffle=False,
+                            num_workers=NUM_WORKERS, pin_memory=True)
 
     model = DinoV3MultiLabel(MODEL_NAME, num_classes=NUM_CLASSES, pretrained=True).to(device)
     if FREEZE_BACKBONE:
@@ -114,7 +115,7 @@ def main():
     optimizer = torch.optim.AdamW(model.parameters(), lr=LR, weight_decay=WEIGHT_DECAY)
     scaler = torch.amp.GradScaler("cuda", enabled=USE_AMP)
 
-    total_steps  = EPOCHS * len(train_loader)
+    total_steps = EPOCHS * len(train_loader)
     warmup_steps = int(WARMUP_EPOCHS * len(train_loader))
 
     start_epoch, global_step, best_score, bad_epochs = maybe_resume(
@@ -155,7 +156,8 @@ def main():
                 thresholds, _ = search_thresholds(val_logits, val_targets, strategy="global", steps=THRESHOLD_STEPS)
                 macro_f1, micro_f1 = f1_from_thresholds(val_logits, val_targets, thresholds)
             else:
-                thresholds, macro_f1, micro_f1 = search_thresholds(val_logits, val_targets, strategy="per_class", steps=THRESHOLD_STEPS)
+                thresholds, macro_f1, micro_f1 = search_thresholds(val_logits, val_targets, strategy="per_class",
+                                                                   steps=THRESHOLD_STEPS)
 
             print(f"[Stage2][Epoch {epoch}] macro_f1={macro_f1:.5f} micro_f1={micro_f1:.5f}")
 
@@ -185,7 +187,8 @@ def main():
                 best_score=best_score,
                 bad_epochs=bad_epochs,
             )
-            print(("New BEST. " if improved else "Saved. ") + f"{ckpt} (bad_epochs={bad_epochs}/{EARLY_STOPPING_PATIENCE})")
+            print((
+                      "New BEST. " if improved else "Saved. ") + f"{ckpt} (bad_epochs={bad_epochs}/{EARLY_STOPPING_PATIENCE})")
 
             # Save thresholds for inference convenience
             if improved:

@@ -17,26 +17,27 @@ from train_utils import (
 # -------------------------
 # Training Config
 # -------------------------
-TRAIN_CSV    = r"D:\expandAI-hiring\expandai-hiring-sewer\train_gate_sanity_5k.csv"
-VAL_CSV      = r"D:\expandAI-hiring\expandai-hiring-sewer\train_gate_sanity_5k.csv"
+TRAIN_CSV = r"D:\expandAI-hiring\expandai-hiring-sewer\train.csv"
+VAL_CSV = r"D:\expandAI-hiring\expandai-hiring-sewer\SewerML_Val_jpg.csv"
 TRAIN_IMAGES = r"D:\expandAI-hiring\expandai-hiring-sewer\train_images"
-VAL_IMAGES   = r"D:\expandAI-hiring\expandai-hiring-sewer\train_images"
+VAL_IMAGES = r"D:\expandAI-hiring\expandai-hiring-sewer\test_images"
 
-OUT_DIR = "outputs_stage1_vit_base_tesk_5k"
+OUT_DIR = "outputs_stage1_vit_small_plus"
 
-MODEL_NAME = "vit_base_patch16_dinov3.lvd1689m"
+MODEL_NAME = "vit_small_plus_patch16_dinov3.lvd1689m"
 RESUME_CKPT = None  # e.g. r"outputs_stage1_vit_base_tesk_5k\best.pt"
 
 DEFECT_ONLY = True  # stage1 must be True
 SEED = 42
-LABELS = ["RB","OB","PF","DE","FS","IS","RO","IN","AF","BE","FO","GR","PH","PB","OS","OP","OK","VA","ND"]
+LABELS = ["RB", "OB", "PF", "DE", "FS", "IS", "RO", "IN", "AF", "BE", "FO", "GR", "PH", "PB", "OS", "OP", "OK", "VA",
+          "ND"]
 
 NUM_CLASSES = 1  # stage1 output is 1 logit
 FREEZE_BACKBONE = False
 
 IMG_SIZE = 256
-TRAIN_BATCH_SIZE = 32
-VAL_BATCH_SIZE = 32
+TRAIN_BATCH_SIZE = 64
+VAL_BATCH_SIZE = 64
 NUM_WORKERS = 8
 
 EPOCHS = 10
@@ -57,7 +58,7 @@ SAVE_ALL_CHECKPOINTS = True
 MAX_KEEP = 5
 
 SEWER_MEAN = [0.523, 0.453, 0.345]
-SEWER_STD  = [0.210, 0.199, 0.154]
+SEWER_STD = [0.210, 0.199, 0.154]
 
 
 def main():
@@ -66,16 +67,16 @@ def main():
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
 
-    train_tf = SimpleTransform(IMG_SIZE, train=True,  SEWER_MEAN=SEWER_MEAN, SEWER_STD=SEWER_STD)
-    val_tf   = SimpleTransform(IMG_SIZE, train=False, SEWER_MEAN=SEWER_MEAN, SEWER_STD=SEWER_STD)
+    train_tf = SimpleTransform(IMG_SIZE, train=True, SEWER_MEAN=SEWER_MEAN, SEWER_STD=SEWER_STD)
+    val_tf = SimpleTransform(IMG_SIZE, train=False, SEWER_MEAN=SEWER_MEAN, SEWER_STD=SEWER_STD)
 
     train_ds = SewerMLDataset(TRAIN_CSV, TRAIN_IMAGES, LABELS, transform=train_tf, defect_only=DEFECT_ONLY)
-    val_ds   = SewerMLDataset(VAL_CSV,   VAL_IMAGES,   LABELS, transform=val_tf,   defect_only=DEFECT_ONLY)
+    val_ds = SewerMLDataset(VAL_CSV, VAL_IMAGES, LABELS, transform=val_tf, defect_only=DEFECT_ONLY)
 
     train_loader = DataLoader(train_ds, batch_size=TRAIN_BATCH_SIZE, shuffle=True,
                               num_workers=NUM_WORKERS, pin_memory=True, drop_last=True)
-    val_loader   = DataLoader(val_ds, batch_size=VAL_BATCH_SIZE, shuffle=False,
-                              num_workers=NUM_WORKERS, pin_memory=True)
+    val_loader = DataLoader(val_ds, batch_size=VAL_BATCH_SIZE, shuffle=False,
+                            num_workers=NUM_WORKERS, pin_memory=True)
 
     model = DinoV3MultiLabel(MODEL_NAME, num_classes=NUM_CLASSES, pretrained=True).to(device)
     if FREEZE_BACKBONE:
@@ -86,7 +87,7 @@ def main():
     optimizer = torch.optim.AdamW(model.parameters(), lr=LR, weight_decay=WEIGHT_DECAY)
     scaler = torch.amp.GradScaler("cuda", enabled=USE_AMP)
 
-    total_steps  = EPOCHS * len(train_loader)
+    total_steps = EPOCHS * len(train_loader)
     warmup_steps = int(WARMUP_EPOCHS * len(train_loader))
 
     start_epoch, global_step, best_f1, bad_epochs = maybe_resume(
@@ -126,7 +127,8 @@ def main():
             best_t, _ = binary_search_threshold_for_f1(val_logits, val_targets, steps=THRESHOLD_STEPS)
             m = binary_metrics_from_logits(val_logits, val_targets, threshold=best_t)
 
-            print(f"[Stage1][Epoch {epoch}] bce={m['bce']:.5f} acc={m['acc']:.5f} f1={m['f1']:.5f} thr={m['threshold']:.3f}")
+            print(
+                f"[Stage1][Epoch {epoch}] bce={m['bce']:.5f} acc={m['acc']:.5f} f1={m['f1']:.5f} thr={m['threshold']:.3f}")
 
             improved = m["f1"] > (best_f1 + MIN_DELTA)
             if improved:
@@ -152,7 +154,8 @@ def main():
                 best_score=best_f1,
                 bad_epochs=bad_epochs,
             )
-            print(("New BEST. " if improved else "Saved. ") + f"{ckpt} (bad_epochs={bad_epochs}/{EARLY_STOPPING_PATIENCE})")
+            print((
+                      "New BEST. " if improved else "Saved. ") + f"{ckpt} (bad_epochs={bad_epochs}/{EARLY_STOPPING_PATIENCE})")
 
             if improved:
                 with open(os.path.join(OUT_DIR, "best_threshold.txt"), "w") as f:
