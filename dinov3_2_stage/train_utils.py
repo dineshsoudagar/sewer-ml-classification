@@ -229,3 +229,71 @@ class SimpleTransform:
                 x = F.rotate(x, deg, interpolation=InterpolationMode.BILINEAR, expand=False)
         x = (x - self.mean) / self.std
         return {"image": x}
+
+
+from torchvision.transforms import InterpolationMode
+import torchvision.transforms.functional as F
+import torch
+import random
+
+class SimpleTransform_SEWER_BASE:
+    def __init__(
+        self,
+        img_size: int,
+        train: bool,
+        rotate_degrees=(0,),          # set to (0), to match paper; or keep (0,90,180)
+        SEWER_MEAN=None,
+        SEWER_STD=None,
+        hflip_p: float = 0.5,
+        jitter_strength: float = 0.10,  # ±10%
+    ):
+        if SEWER_MEAN is None:
+            SEWER_MEAN = [0.523, 0.453, 0.345]
+        if SEWER_STD is None:
+            SEWER_STD = [0.210, 0.199, 0.154]
+
+        self.img_size = img_size
+        self.train = train
+        self.rotate_degrees = rotate_degrees
+        self.hflip_p = float(hflip_p)
+        self.jitter_strength = float(jitter_strength)
+
+        self.mean = torch.tensor(SEWER_MEAN).view(3, 1, 1)
+        self.std = torch.tensor(SEWER_STD).view(3, 1, 1)
+
+    def __call__(self, image):
+        # HWC uint8 -> CHW float [0,1]
+        x = torch.from_numpy(image).permute(2, 0, 1).float() / 255.0
+
+        # Resize first
+        x = F.resize(
+            x,
+            [self.img_size, self.img_size],
+            interpolation=InterpolationMode.BILINEAR,
+            antialias=True,
+        )
+
+        if self.train:
+            # Horizontal flip
+            if random.random() < self.hflip_p:
+                x = F.hflip(x)
+
+            # Color jitter ±10%
+            j = self.jitter_strength
+            b = 1.0 + random.uniform(-j, j)
+            c = 1.0 + random.uniform(-j, j)
+            s = 1.0 + random.uniform(-j, j)
+            h = random.uniform(-j, j)  # hue shift in [-0.5,0.5], so 0.10 is safe
+            x = F.adjust_brightness(x, b)
+            x = F.adjust_contrast(x, c)
+            x = F.adjust_saturation(x, s)
+            x = F.adjust_hue(x, h)
+
+            # Optional rotation (disabled by default)
+            deg = random.choice(self.rotate_degrees)
+            if deg != 0:
+                x = F.rotate(x, deg, interpolation=InterpolationMode.BILINEAR, expand=False)
+
+        # Normalize
+        x = (x - self.mean) / self.std
+        return {"image": x}

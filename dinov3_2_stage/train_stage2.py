@@ -56,7 +56,7 @@ GRAD_ACCUM_STEPS = 1
 USE_POS_WEIGHT = True
 POS_WEIGHT_CLAMP = 50.0
 
-THRESHOLD_STRATEGY = "global"  # "global" or "per_class"
+THRESHOLD_STRATEGY = "per_class"  # "global" or "per_class"
 THRESHOLD_STEPS = 200
 
 EVAL_EVERY_EPOCHS = 1

@@ -14,7 +14,6 @@ from train_utils import SimpleTransform, set_seed
 # Use your metrics functions
 from metrics import binary_metrics_from_logits, f1_from_thresholds
 
-
 # ============================================================
 # Config (edit these)
 # ============================================================
@@ -48,10 +47,8 @@ NUM_WORKERS = 8
 USE_AMP = False
 SEED = 42
 
-LABELS = [
-    "RB", "OB", "PF", "DE", "FS", "IS", "RO", "IN", "AF", "BE",
-    "FO", "GR", "PH", "PB", "OS", "OP", "OK", "VA", "ND"
-]
+LABELS = ["VA", "RB", "OB", "PF", "DE", "FS", "IS", "RO", "IN", "AF", "BE",
+          "FO", "GR", "PH", "PB", "OS", "OP", "OK", "ND" ]
 ND_LABEL = "ND"
 
 SEWER_MEAN = [0.523, 0.453, 0.345]
@@ -273,7 +270,8 @@ def predict_stage2_logits(df_subset: pd.DataFrame, device: str):
 # ============================================================
 def maybe_print_metrics(df_gt: pd.DataFrame, df_pred: pd.DataFrame,
                         stage1_names: list[str], stage1_logits: np.ndarray, stage1_thr: float,
-                        labels_wo_nd: list[str], stage2_names: list[str], stage2_logits: np.ndarray, stage2_thresholds: np.ndarray):
+                        labels_wo_nd: list[str], stage2_names: list[str], stage2_logits: np.ndarray,
+                        stage2_thresholds: np.ndarray):
     # Need GT columns
     if not all(l in df_gt.columns for l in LABELS):
         print("[METRICS] GT label columns not found in VAL_CSV. Skipping metrics.")

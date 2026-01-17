@@ -10,7 +10,7 @@ from model import DinoV3MultiLabel
 from metrics import binary_search_threshold_for_f1, binary_metrics_from_logits
 from train_utils import (
     set_seed, cosine_warmup_lr, run_eval,
-    SimpleTransform,
+    SimpleTransform, SimpleTransform_SEWER_BASE,
     maybe_resume, save_checkpoint_binary, cleanup_checkpoints
 )
 
@@ -25,7 +25,7 @@ VAL_IMAGES = r"D:\expandAI-hiring\expandai-hiring-sewer\test_images"
 OUT_DIR = "outputs_stage1_vit_small_plus"
 
 MODEL_NAME = "vit_small_plus_patch16_dinov3.lvd1689m"
-RESUME_CKPT = None  # e.g. r"outputs_stage1_vit_base_tesk_5k\best.pt"
+RESUME_CKPT = "D:\expandAI-hiring\expandai-hiring-sewer\sewer-ml-classification\dinov3_2_stage\outputs_stage1_vit_small_plus\epoch05_f1_0.92328_acc_0.93119.pt"  # e.g. r"outputs_stage1_vit_base_tesk_5k\best.pt"
 
 DEFECT_ONLY = True  # stage1 must be True
 SEED = 42
@@ -67,8 +67,8 @@ def main():
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
 
-    train_tf = SimpleTransform(IMG_SIZE, train=True, SEWER_MEAN=SEWER_MEAN, SEWER_STD=SEWER_STD)
-    val_tf = SimpleTransform(IMG_SIZE, train=False, SEWER_MEAN=SEWER_MEAN, SEWER_STD=SEWER_STD)
+    train_tf = SimpleTransform_SEWER_BASE(IMG_SIZE, train=True, SEWER_MEAN=SEWER_MEAN, SEWER_STD=SEWER_STD)
+    val_tf = SimpleTransform_SEWER_BASE(IMG_SIZE, train=False, SEWER_MEAN=SEWER_MEAN, SEWER_STD=SEWER_STD)
 
     train_ds = SewerMLDataset(TRAIN_CSV, TRAIN_IMAGES, LABELS, transform=train_tf, defect_only=DEFECT_ONLY)
     val_ds = SewerMLDataset(VAL_CSV, VAL_IMAGES, LABELS, transform=val_tf, defect_only=DEFECT_ONLY)
