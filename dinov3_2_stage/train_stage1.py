@@ -22,14 +22,15 @@ VAL_CSV = r"D:\expandAI-hiring\expandai-hiring-sewer\SewerML_Val_jpg.csv"
 TRAIN_IMAGES = r"D:\expandAI-hiring\expandai-hiring-sewer\train_images"
 VAL_IMAGES = r"D:\expandAI-hiring\expandai-hiring-sewer\test_images"
 
-OUT_DIR = "outputs_stage1_vit_small_plus"
+OUT_DIR = "outputs_stage1_vit_base"
 
-MODEL_NAME = "vit_small_plus_patch16_dinov3.lvd1689m"
-RESUME_CKPT = "D:\expandAI-hiring\expandai-hiring-sewer\sewer-ml-classification\dinov3_2_stage\outputs_stage1_vit_small_plus\epoch05_f1_0.92328_acc_0.93119.pt"  # e.g. r"outputs_stage1_vit_base_tesk_5k\best.pt"
+MODEL_NAME = "vit_base_patch16_dinov3.lvd1689m"
+RESUME_CKPT = None
 
 DEFECT_ONLY = True  # stage1 must be True
 SEED = 42
 LABELS = ["RB", "OB", "PF", "DE", "FS", "IS", "RO", "IN", "AF", "BE", "FO", "GR", "PH", "PB", "OS", "OP", "OK", "VA",
+
           "ND"]
 
 NUM_CLASSES = 1  # stage1 output is 1 logit

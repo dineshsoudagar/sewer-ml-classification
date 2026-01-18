@@ -24,6 +24,15 @@ IMAGES_DIR = r"D:\expandAI-hiring\expandai-hiring-sewer\test_images"
 STAGE1_CKPT = r"D:\expandAI-hiring\expandai-hiring-sewer\sewer-ml-classification\dinov3_2_stage\outputs_stage1_vit_small_plus\best.pt"
 STAGE2_CKPT = r"D:\expandAI-hiring\expandai-hiring-sewer\sewer-ml-classification\dinov3_2_stage\outputs_stage2_vit_base\best.pt"
 
+# ---- Use provided thresholds instead of tuning/searching ----
+STAGE1_THRESHOLD_TXT = r"D:\expandAI-hiring\expandai-hiring-sewer\sewer-ml-classification\dinov3_2_stage\outputs_stage1_vit_small_plus\best_threshold.txt"
+STAGE2_THRESHOLD_JSON = r"D:\expandAI-hiring\expandai-hiring-sewer\sewer-ml-classification\dinov3_2_stage\outputs_stage2_vit_base\best_thresholds.json"
+
+# IMPORTANT:
+# If your updated Stage-1 model outputs DEFECT_PRESENT (1=defect, 0=ND), set to "DEFECT_PRESENT".
+# If your Stage-1 model outputs ND (1=ND, 0=defect), keep as "ND".
+STAGE1_OUTPUT_MODE = "ND"  # "ND" or "DEFECT_PRESENT"
+
 MODEL_NAME_STAGE_1 = "vit_small_plus_patch16_dinov3.lvd1689m"
 MODEL_NAME_STAGE_2 = "vit_base_patch16_dinov3.lvd1689m"
 
@@ -60,7 +69,7 @@ T2_PERCLASS_FINE_WINDOW = 0.05
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 USE_AMP_EVAL = True
 
-OUT_ROOT = "e2e_exports_4"
+OUT_ROOT = "e2e_exports_4_with_thres_files"
 
 # =========================
 
@@ -95,6 +104,37 @@ def force_nd_if_all_zero(y_pred_full: np.ndarray, labels: list[str], nd_label: s
 
     return y, mask
 
+def load_stage1_threshold_txt(path: str) -> float:
+    with open(path, "r") as f:
+        s = f.read().strip()
+    # allow commas/newlines/spaces
+    s = s.replace(",", " ").strip()
+    t = float(s.split()[0])
+    if not (0.0 <= t <= 1.0):
+        raise ValueError(f"Stage1 threshold out of [0,1]: {t}")
+    return t
+
+
+def load_stage2_thresholds_json(path: str, stage2_labels: list[str]) -> np.ndarray:
+    with open(path, "r") as f:
+        d = json.load(f)
+
+    if not isinstance(d, dict):
+        raise ValueError("Stage2 threshold JSON must be a dict: {label: threshold}")
+
+    missing = [lab for lab in stage2_labels if lab not in d]
+    extra = [lab for lab in d.keys() if lab not in stage2_labels]
+
+    if missing:
+        raise ValueError(f"Stage2 threshold JSON missing labels: {missing}")
+    if extra:
+        print(f"[Warn] Stage2 threshold JSON has extra keys not used: {extra}")
+
+    t = np.array([float(d[lab]) for lab in stage2_labels], dtype=np.float32)
+    if np.any(t < 0.0) or np.any(t > 1.0):
+        bad = [(lab, float(tt)) for lab, tt in zip(stage2_labels, t.tolist()) if not (0.0 <= tt <= 1.0)]
+        raise ValueError(f"Stage2 thresholds out of [0,1]: {bad}")
+    return t
 
 def force_one_label_by_maxprob(
     y_pred_full: np.ndarray,
@@ -395,24 +435,40 @@ def main():
 
     print("Inferring Stage-1 logits...")
     logits1 = infer_logits(m1, loader, DEVICE, use_amp=USE_AMP_EVAL).reshape(-1)
-    p_nd = _sigmoid_np(logits1)
+    p1 = _sigmoid_np(logits1)
+
+    if STAGE1_OUTPUT_MODE == "ND":
+        p_nd = p1
+    else:
+        # stage1 predicts DEFECT_PRESENT
+        p_nd = 1.0 - p1
 
     print("Inferring Stage-2 logits...")
     logits2 = infer_logits(m2, loader, DEVICE, use_amp=USE_AMP_EVAL)
     p2 = _sigmoid_np(logits2)
 
-    # ---- End-to-end tuning ----
-    print("\nTuning Stage-2 per-class thresholds (given t_nd=0.5)...")
-    t2_pc = tune_stage2_per_class_thresholds(p_nd, p2, y_true_full, t_nd=0.5)
+    # ---- Use provided thresholds (NO tuning/search) ----
+    t_stage1 = load_stage1_threshold_txt(STAGE1_THRESHOLD_TXT)
+    t2_pc = load_stage2_thresholds_json(STAGE2_THRESHOLD_JSON, STAGE2_LABELS)
 
-    print("Tuning Stage-1 ND threshold (end-to-end)...")
-    t_nd_best, _, _ = tune_tnd_for_end2end(p_nd, p2, y_true_full, t2_pc)
+    # Stage-1 probability interpretation
+    # If Stage-1 outputs ND (1=ND): p_nd = sigmoid(logits1), and threshold is directly t_nd
+    # If Stage-1 outputs DEFECT_PRESENT (1=defect): p_defect = sigmoid(logits1),
+    # then p_nd = 1 - p_defect, and an equivalent ND-threshold is t_nd = 1 - t_defect
+    if STAGE1_OUTPUT_MODE == "ND":
+        t_nd_best = float(t_stage1)
+        print(f"[Stage1] Using provided threshold for ND: t_nd={t_nd_best:.6f}")
+    elif STAGE1_OUTPUT_MODE == "DEFECT_PRESENT":
+        # Convert to ND-space so build_end2end_preds() can remain unchanged
+        t_nd_best = float(1.0 - t_stage1)
+        print(
+            f"[Stage1] Using provided threshold for DEFECT_PRESENT: t_defect={t_stage1:.6f} -> derived t_nd={t_nd_best:.6f}")
+    else:
+        raise ValueError(f"Unknown STAGE1_OUTPUT_MODE: {STAGE1_OUTPUT_MODE}")
 
-    print("Re-tuning Stage-2 per-class thresholds with best t_nd...")
-    t2_pc = tune_stage2_per_class_thresholds(p_nd, p2, y_true_full, t_nd=t_nd_best)
-
+    # Evaluate end-to-end score using the provided thresholds (if labels exist)
     macro_best, micro_best = end2end_score(p_nd, p2, y_true_full, t_nd_best, t2_pc)
-    t2_global_best, _, _ = tune_stage2_global_threshold(p_nd, p2, y_true_full, t_nd_best)
+    t2_global_best = float("nan")  # not computed (no search)
 
     print("\n================ RESULT ================")
     print(f"Stage1 ckpt: {os.path.basename(STAGE1_CKPT)}")
@@ -465,7 +521,11 @@ def main():
         "stage1": {
             "checkpoint": os.path.basename(STAGE1_CKPT),
             "nd_threshold": float(t_nd_best),
-            "meaning": "predict ND=1 if p(ND)>=nd_threshold else ND=0 and apply stage2 thresholds",
+            "meaning": (
+                "Stage1 outputs ND probability; predict ND=1 if p(ND)>=nd_threshold else run stage2"
+                if STAGE1_OUTPUT_MODE == "ND"
+                else "Stage1 outputs DEFECT_PRESENT probability; internally converted to p(ND)=1-p(defect); predict ND=1 if p(ND)>=nd_threshold else run stage2"
+            ),
         },
         "stage2": {
             "checkpoint": os.path.basename(STAGE2_CKPT),
