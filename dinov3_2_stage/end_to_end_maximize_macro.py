@@ -22,8 +22,8 @@ from train_utils import SimpleTransform
 CSV_PATH = r"D:\expandAI-hiring\expandai-hiring-sewer\SewerML_Val_jpg.csv"
 IMAGES_DIR = r"D:\expandAI-hiring\expandai-hiring-sewer\test_images"
 
-STAGE1_CKPT = r"D:\expandAI-hiring\expandai-hiring-sewer\sewer-ml-classification\dinov3_2_stage\outputs_stage1_vit_small_plus\best.pt"
-STAGE2_CKPT = r"D:\expandAI-hiring\expandai-hiring-sewer\sewer-ml-classification\dinov3_2_stage\outputs_stage2_vit_base\best.pt"
+STAGE1_CKPT = r"D:\expandAI-hiring\expandai-hiring-sewer\sewer-ml-classification\dinov3_2_stage\outputs_stage1_vit_small_plus\epoch05_f1_0.92328_acc_0.93119.pt"
+STAGE2_CKPT = r"D:\expandAI-hiring\expandai-hiring-sewer\sewer-ml-classification\dinov3_2_stage\outputs_stage2_vit_base\epoch10_macroF1_0.72067_microF1_0.79624.pt"
 
 MODEL_NAME_STAGE_1 = "vit_small_plus_patch16_dinov3.lvd1689m"
 MODEL_NAME_STAGE_2 = "vit_base_patch16_dinov3.lvd1689m"
@@ -44,8 +44,8 @@ STAGE2_LABELS = [
     "RB", "OB", "PF", "DE", "FS", "IS", "RO", "IN", "AF", "BE",
     "FO", "GR", "PH", "PB", "OS", "OP", "OK", "VA"
 ]
-
-IMG_SIZE = 256
+STAGE1_OUTPUT_MODE = "ND"  # "ND" or "DEFECT_PRESENT"
+IMG_SIZE = 384
 BATCH_SIZE = 64
 NUM_WORKERS = 8
 
@@ -64,7 +64,7 @@ T2_PERCLASS_FINE_WINDOW = 0.05
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 USE_AMP_EVAL = True
 
-OUT_ROOT = "e2e_exports_4"
+OUT_ROOT = "e2e_exports_with_stage2_epoch10_stage1_5"
 
 # --- Policy export set (one run -> all of these saved) ---
 POLICY_CONFIGS = [
@@ -564,6 +564,19 @@ def save_predictions_csv(df_in: pd.DataFrame, y_pred_full: np.ndarray, out_csv: 
         out[lab] = y_pred_full[:, i].astype(np.int32)
     out.to_csv(out_csv, index=False)
 
+def stage1_prob_to_p_nd(p1: np.ndarray) -> np.ndarray:
+    """
+    Convert Stage-1 sigmoid output to p_nd = P(ND), depending on what Stage-1 was trained to predict.
+      - STAGE1_OUTPUT_MODE == "ND"             => p1 is already P(ND)
+      - STAGE1_OUTPUT_MODE == "DEFECT_PRESENT" => p1 is P(defect) so P(ND)=1-p1
+    """
+    if STAGE1_OUTPUT_MODE == "ND":
+        return p1
+    elif STAGE1_OUTPUT_MODE == "DEFECT_PRESENT":
+        return 1.0 - p1
+    else:
+        raise ValueError(f"Unknown STAGE1_OUTPUT_MODE: {STAGE1_OUTPUT_MODE}")
+
 
 def main():
 
@@ -600,7 +613,10 @@ def main():
     elif RAW_LOGITS is not None:
         print("[RAW] Using raw logits:", RAW_LOGITS)
         logits1, logits2 = load_raw_logits_for_df(RAW_LOGITS, df)
-        p_nd = _sigmoid_np(logits1)
+
+        p1 = _sigmoid_np(logits1)  # stage1 sigmoid output (meaning depends on STAGE1_OUTPUT_MODE)
+        p_nd = stage1_prob_to_p_nd(p1)  # ALWAYS convert to P(ND)
+
         p2 = _sigmoid_np(logits2)
     else:
         # Run inference
@@ -614,7 +630,8 @@ def main():
 
         print("Inferring Stage-1 logits...")
         logits1 = infer_logits(m1, loader, DEVICE, use_amp=USE_AMP_EVAL).reshape(-1)
-        p_nd = _sigmoid_np(logits1)
+        p1 = _sigmoid_np(logits1)
+        p_nd = stage1_prob_to_p_nd(p1)
 
         print("Inferring Stage-2 logits...")
         logits2 = infer_logits(m2, loader, DEVICE, use_amp=USE_AMP_EVAL)
@@ -771,8 +788,13 @@ def main():
         },
         "stage1": {
             "checkpoint": os.path.basename(STAGE1_CKPT),
+            "output_mode": STAGE1_OUTPUT_MODE,
             "nd_threshold": float(t_nd_best),
-            "meaning": "baseline thresholding uses hard_gate; policy exports may override behavior",
+            "meaning": (
+                "Stage1 outputs ND probability; p_nd = p1"
+                if STAGE1_OUTPUT_MODE == "ND"
+                else "Stage1 outputs DEFECT_PRESENT probability; p_nd = 1 - p1"
+            ),
         },
         "stage2": {
             "checkpoint": os.path.basename(STAGE2_CKPT),
@@ -809,9 +831,6 @@ def main():
     print("  - stage2_selected.pt")
     print("  - thresholds_end2end.json")
     print("  - summary.json")
-    if args.raw_probs is None and args.raw_logits is None:
-        print("  - raw_probs_stage1_stage2.csv")
-        print("  - raw_logits_stage1_stage2.csv")
 
 
 if __name__ == "__main__":

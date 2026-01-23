@@ -22,29 +22,28 @@ VAL_CSV = r"D:\expandAI-hiring\expandai-hiring-sewer\SewerML_Val_jpg.csv"
 TRAIN_IMAGES = r"D:\expandAI-hiring\expandai-hiring-sewer\train_images"
 VAL_IMAGES = r"D:\expandAI-hiring\expandai-hiring-sewer\test_images"
 
-OUT_DIR = "outputs_stage1_vit_base"
+OUT_DIR = "outputs_stage1_vit_samll_plus_img_384"
 
-MODEL_NAME = "vit_base_patch16_dinov3.lvd1689m"
-RESUME_CKPT = None
+MODEL_NAME = "vit_small_plus_patch16_dinov3.lvd1689m"
+RESUME_CKPT = r"outputs_stage1_vit_samll_plus_img_384\best.pt"
 
 DEFECT_ONLY = True  # stage1 must be True
 SEED = 42
 LABELS = ["RB", "OB", "PF", "DE", "FS", "IS", "RO", "IN", "AF", "BE", "FO", "GR", "PH", "PB", "OS", "OP", "OK", "VA",
-
           "ND"]
 
 NUM_CLASSES = 1  # stage1 output is 1 logit
 FREEZE_BACKBONE = False
 
-IMG_SIZE = 256
-TRAIN_BATCH_SIZE = 64
-VAL_BATCH_SIZE = 64
+IMG_SIZE = 384
+TRAIN_BATCH_SIZE = 32
+VAL_BATCH_SIZE = 32
 NUM_WORKERS = 8
 
 EPOCHS = 10
 LR = 1.0e-5
 WEIGHT_DECAY = 0.05
-WARMUP_EPOCHS = 1
+WARMUP_EPOCHS = 0.1
 
 USE_AMP = False
 GRAD_ACCUM_STEPS = 1
@@ -75,7 +74,8 @@ def main():
     val_ds = SewerMLDataset(VAL_CSV, VAL_IMAGES, LABELS, transform=val_tf, defect_only=DEFECT_ONLY)
 
     train_loader = DataLoader(train_ds, batch_size=TRAIN_BATCH_SIZE, shuffle=True,
-                              num_workers=NUM_WORKERS, pin_memory=True, drop_last=True)
+                              num_workers=NUM_WORKERS, pin_memory=True, drop_last=True, persistent_workers=True,
+                              prefetch_factor=4)
     val_loader = DataLoader(val_ds, batch_size=VAL_BATCH_SIZE, shuffle=False,
                             num_workers=NUM_WORKERS, pin_memory=True)
 
@@ -94,6 +94,10 @@ def main():
     start_epoch, global_step, best_f1, bad_epochs = maybe_resume(
         RESUME_CKPT, model, optimizer, scaler if USE_AMP else None, device
     )
+    if RESUME_CKPT:
+        global_step = 0
+        optimizer = torch.optim.AdamW(model.parameters(), lr=LR, weight_decay=WEIGHT_DECAY)
+        print("Resuming training with 0 global step and new optimizer")
 
     for epoch in range(start_epoch, EPOCHS + 1):
         model.train()
@@ -110,8 +114,7 @@ def main():
 
             with torch.amp.autocast("cuda", enabled=USE_AMP):
                 logits = model(x)
-
-            loss = criterion(logits.float(), y.float()) / GRAD_ACCUM_STEPS
+                loss = criterion(logits, y) / GRAD_ACCUM_STEPS
             scaler.scale(loss).backward()
 
             if step % GRAD_ACCUM_STEPS == 0:

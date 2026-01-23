@@ -74,11 +74,11 @@ def cleanup_checkpoints(out_dir: str, keep: int = 5, prefix: str = "epoch", suff
 # Resume helpers
 # -------------------------
 def maybe_resume(
-    resume_ckpt: Optional[str],
-    model: nn.Module,
-    optimizer,
-    scaler,
-    device: str,
+        resume_ckpt: Optional[str],
+        model: nn.Module,
+        optimizer,
+        scaler,
+        device: str,
 ) -> Tuple[int, int, float, int]:
     """
     Returns: start_epoch, global_step, best_score, bad_epochs
@@ -101,7 +101,8 @@ def maybe_resume(
     bad_epochs = int(ckpt.get("bad_epochs", 0))
 
     print(f"[Resume] Loaded: {resume_ckpt}")
-    print(f"[Resume] start_epoch={start_epoch}, global_step={global_step}, best_score={best_score:.5f}, bad_epochs={bad_epochs}")
+    print(
+        f"[Resume] start_epoch={start_epoch}, global_step={global_step}, best_score={best_score:.5f}, bad_epochs={bad_epochs}")
     return start_epoch, global_step, best_score, bad_epochs
 
 
@@ -109,21 +110,21 @@ def maybe_resume(
 # Save checkpoints (Stage1 / Stage2)
 # -------------------------
 def save_checkpoint_binary(
-    out_dir: str,
-    epoch: int,
-    model: nn.Module,
-    optimizer,
-    scaler,
-    model_name: str,
-    img_size: int,
-    labels: List[str],
-    threshold: float,
-    f1: float,
-    acc: float,
-    best: bool,
-    global_step: int,
-    best_score: float,
-    bad_epochs: int,
+        out_dir: str,
+        epoch: int,
+        model: nn.Module,
+        optimizer,
+        scaler,
+        model_name: str,
+        img_size: int,
+        labels: List[str],
+        threshold: float,
+        f1: float,
+        acc: float,
+        best: bool,
+        global_step: int,
+        best_score: float,
+        bad_epochs: int,
 ) -> str:
     fname = f"epoch{epoch:02d}_f1_{f1:.5f}_acc_{acc:.5f}.pt"
     path = os.path.join(out_dir, fname)
@@ -157,21 +158,21 @@ def save_checkpoint_binary(
 
 
 def save_checkpoint_multilabel(
-    out_dir: str,
-    epoch: int,
-    model: nn.Module,
-    optimizer,
-    scaler,
-    model_name: str,
-    img_size: int,
-    labels: List[str],
-    thresholds: np.ndarray,
-    macro_f1: float,
-    micro_f1: float,
-    best: bool,
-    global_step: int,
-    best_score: float,
-    bad_epochs: int,
+        out_dir: str,
+        epoch: int,
+        model: nn.Module,
+        optimizer,
+        scaler,
+        model_name: str,
+        img_size: int,
+        labels: List[str],
+        thresholds: np.ndarray,
+        macro_f1: float,
+        micro_f1: float,
+        best: bool,
+        global_step: int,
+        best_score: float,
+        bad_epochs: int,
 ) -> str:
     fname = f"epoch{epoch:02d}_macroF1_{macro_f1:.5f}_microF1_{micro_f1:.5f}.pt"
     path = os.path.join(out_dir, fname)
@@ -236,16 +237,17 @@ import torchvision.transforms.functional as F
 import torch
 import random
 
+
 class SimpleTransform_SEWER_BASE:
     def __init__(
-        self,
-        img_size: int,
-        train: bool,
-        rotate_degrees=(0,),          # set to (0), to match paper; or keep (0,90,180)
-        SEWER_MEAN=None,
-        SEWER_STD=None,
-        hflip_p: float = 0.5,
-        jitter_strength: float = 0.10,  # ±10%
+            self,
+            img_size: int,
+            train: bool,
+            rotate_degrees=(0, 180),  # set to (0), to match paper; or keep (0,90,180)
+            SEWER_MEAN=None,
+            SEWER_STD=None,
+            hflip_p: float = 0.5,
+            jitter_strength: float = 0.10,  # ±10%
     ):
         if SEWER_MEAN is None:
             SEWER_MEAN = [0.523, 0.453, 0.345]

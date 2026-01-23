@@ -6,7 +6,7 @@ import pandas as pd
 # Config
 # -------------------------
 GT_CSV = r"D:\expandAI-hiring\expandai-hiring-sewer\SewerML_Val_jpg.csv"          # ground-truth csv
-PRED_CSV = r"D:\expandAI-hiring\expandai-hiring-sewer\sewer-ml-classification\dinov3_2_stage\outputs_final_predictions.csv"  # your saved predictions csv
+PRED_CSV = r"D:\expandAI-hiring\expandai-hiring-sewer\sewer-ml-classification\dinov3_2_stage\e2e_exports_stage1_384_ep3_stage2_ep12_ASL_256\e2e__s1_best__s2_best\pred_end2end__macro_0p700182.csv"    # your predicted probs OR logits CSV (same columns, different values)
 
 LABELS = [
     "RB", "OB", "PF", "DE", "FS", "IS", "RO", "IN", "AF", "BE",

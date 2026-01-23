@@ -21,12 +21,12 @@ from train_utils import SimpleTransform
 CSV_PATH = r"D:\expandAI-hiring\expandai-hiring-sewer\SewerML_Val_jpg.csv"
 IMAGES_DIR = r"D:\expandAI-hiring\expandai-hiring-sewer\test_images"
 
-STAGE1_CKPT = r"D:\expandAI-hiring\expandai-hiring-sewer\sewer-ml-classification\dinov3_2_stage\outputs_stage1_vit_small_plus\best.pt"
-STAGE2_CKPT = r"D:\expandAI-hiring\expandai-hiring-sewer\sewer-ml-classification\dinov3_2_stage\outputs_stage2_vit_base\best.pt"
+STAGE1_CKPT = r"D:\expandAI-hiring\expandai-hiring-sewer\sewer-ml-classification\dinov3_2_stage\outputs_stage1_vit_samll_plus_img_384\epoch05_f1_0.92718_acc_0.93508.pt"
+STAGE2_CKPT = r"D:\expandAI-hiring\expandai-hiring-sewer\sewer-ml-classification\dinov3_2_stage\outputs_stage2_vit_base_fn_tnd_on_384\epoch12_macroF1_0.73492_microF1_0.80464_fn_tnd_on_384.pt"
 
 # ---- Use provided thresholds instead of tuning/searching ----
-STAGE1_THRESHOLD_TXT = r"D:\expandAI-hiring\expandai-hiring-sewer\sewer-ml-classification\dinov3_2_stage\outputs_stage1_vit_small_plus\best_threshold.txt"
-STAGE2_THRESHOLD_JSON = r"D:\expandAI-hiring\expandai-hiring-sewer\sewer-ml-classification\dinov3_2_stage\outputs_stage2_vit_base\best_thresholds.json"
+STAGE1_THRESHOLD_TXT = r"D:\expandAI-hiring\expandai-hiring-sewer\sewer-ml-classification\dinov3_2_stage\outputs_stage1_vit_samll_plus_img_384\best_threshold.txt"
+STAGE2_THRESHOLD_JSON = r"D:\expandAI-hiring\expandai-hiring-sewer\sewer-ml-classification\dinov3_2_stage\outputs_stage2_vit_base_fn_tnd_on_384\best_thresholds_epoch12_macroF1_0.73492_microF1_0.80464_fn_tnd_on_384.json"
 
 # IMPORTANT:
 # If your updated Stage-1 model outputs DEFECT_PRESENT (1=defect, 0=ND), set to "DEFECT_PRESENT".
@@ -50,7 +50,7 @@ STAGE2_LABELS = [
     "FO", "GR", "PH", "PB", "OS", "OP", "OK", "VA"
 ]
 
-IMG_SIZE = 256
+IMG_SIZE = 384
 BATCH_SIZE = 64
 NUM_WORKERS = 8
 
@@ -59,7 +59,6 @@ MONITOR = "macro"  # "macro" or "micro"
 TND_COARSE_STEPS = 200
 TND_FINE_STEPS = 400
 TND_FINE_WINDOW = 0.05
-
 T2_GLOBAL_STEPS = 200
 
 T2_PERCLASS_COARSE_STEPS = 200
@@ -69,7 +68,7 @@ T2_PERCLASS_FINE_WINDOW = 0.05
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 USE_AMP_EVAL = True
 
-OUT_ROOT = "e2e_exports_4_with_thres_files"
+OUT_ROOT = "e2e_exports_5_stage1_ep5_n_2_ep12_fn_tnd_on_384"
 
 # =========================
 

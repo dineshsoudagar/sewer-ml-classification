@@ -12,7 +12,7 @@ from model import DinoV3MultiLabel
 from metrics import search_thresholds, f1_from_thresholds
 from train_utils import (
     set_seed, cosine_warmup_lr, run_eval,
-    SimpleTransform,
+    SimpleTransform, SimpleTransform_SEWER_BASE,
     maybe_resume, save_checkpoint_multilabel, cleanup_checkpoints
 )
 
@@ -43,6 +43,7 @@ FREEZE_BACKBONE = False
 IMG_SIZE = 256
 TRAIN_BATCH_SIZE = 32
 VAL_BATCH_SIZE = 32
+
 NUM_WORKERS = 8
 
 EPOCHS = 20
@@ -89,8 +90,8 @@ def main():
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
 
-    train_tf = SimpleTransform(IMG_SIZE, train=True, SEWER_MEAN=SEWER_MEAN, SEWER_STD=SEWER_STD)
-    val_tf = SimpleTransform(IMG_SIZE, train=False, SEWER_MEAN=SEWER_MEAN, SEWER_STD=SEWER_STD)
+    train_tf = SimpleTransform_SEWER_BASE(IMG_SIZE, train=True, SEWER_MEAN=SEWER_MEAN, SEWER_STD=SEWER_STD)
+    val_tf = SimpleTransform_SEWER_BASE(IMG_SIZE, train=False, SEWER_MEAN=SEWER_MEAN, SEWER_STD=SEWER_STD)
 
     # dataset handles ND filtering and ND column removal when defect_only=False
     train_ds = SewerMLDataset(TRAIN_CSV, TRAIN_IMAGES, LABELS, transform=train_tf, defect_only=DEFECT_ONLY)
