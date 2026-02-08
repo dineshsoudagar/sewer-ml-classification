@@ -22,7 +22,7 @@ VAL_CSV = r"D:\expandAI-hiring\expandai-hiring-sewer\SewerML_Val_jpg.csv"
 TRAIN_IMAGES = r"D:\expandAI-hiring\expandai-hiring-sewer\train_images"
 VAL_IMAGES = r"D:\expandAI-hiring\expandai-hiring-sewer\test_images"
 
-OUT_DIR = "outputs_stage1_vit_samll_plus_img_384"
+OUT_DIR = "outputs_stage1_vit_samll_plus_img_448"
 
 MODEL_NAME = "vit_small_plus_patch16_dinov3.lvd1689m"
 RESUME_CKPT = r"outputs_stage1_vit_samll_plus_img_384\best.pt"
@@ -35,7 +35,7 @@ LABELS = ["RB", "OB", "PF", "DE", "FS", "IS", "RO", "IN", "AF", "BE", "FO", "GR"
 NUM_CLASSES = 1  # stage1 output is 1 logit
 FREEZE_BACKBONE = False
 
-IMG_SIZE = 384
+IMG_SIZE = 448
 TRAIN_BATCH_SIZE = 32
 VAL_BATCH_SIZE = 32
 NUM_WORKERS = 8

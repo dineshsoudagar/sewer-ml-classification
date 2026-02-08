@@ -37,13 +37,15 @@ VAL_CSV = r"D:\expandAI-hiring\expandai-hiring-sewer\SewerML_Val_jpg.csv"
 TRAIN_IMAGES = r"D:\expandAI-hiring\expandai-hiring-sewer\train_images"
 VAL_IMAGES = r"D:\expandAI-hiring\expandai-hiring-sewer\test_images"
 
-OUT_DIR = "outputs_stage3_low_labels_384"
+OUT_DIR = "outputs_stage3_low_labels_384_to_512"
 MODEL_NAME = "vit_small_patch16_dinov3.lvd1689m"
 
 # Resume (MODEL WEIGHTS ONLY)
 RESUME_CKPT = r"outputs_stage3_low_labels_384\best.pt"
 
-IMG_SIZE = 384
+MINE_SIZE = 384
+TRAIN_SIZE = 512
+
 TRAIN_BATCH_SIZE = 32
 VAL_BATCH_SIZE = 64
 NUM_WORKERS = 8
@@ -68,8 +70,8 @@ MINE_BATCH_SIZE = 64
 
 # Optional small ND negatives for safety (Stage-1 gates ND, so keep small)
 ADD_ND_NEG = False
-ND_NEG_MULT = 0.0
-ND_NEG_CAP: Optional[int] = 0
+ND_NEG_MULT = 0.25
+ND_NEG_CAP: Optional[int] = None
 
 # Loss
 USE_POS_WEIGHT = True
@@ -240,8 +242,10 @@ def main():
     device = "cuda" if torch.cuda.is_available() else "cpu"
 
     # Transforms
-    train_tf = SimpleTransform_SEWER_BASE(IMG_SIZE, train=True, SEWER_MEAN=SEWER_MEAN, SEWER_STD=SEWER_STD)
-    eval_tf = SimpleTransform_SEWER_BASE(IMG_SIZE, train=False, SEWER_MEAN=SEWER_MEAN, SEWER_STD=SEWER_STD)
+    mine_tf = SimpleTransform_SEWER_BASE(MINE_SIZE, train=False, SEWER_MEAN=SEWER_MEAN,
+                                         SEWER_STD=SEWER_STD)  # deterministic
+    train_tf = SimpleTransform_SEWER_BASE(TRAIN_SIZE, train=True, SEWER_MEAN=SEWER_MEAN, SEWER_STD=SEWER_STD)
+    eval_tf = SimpleTransform_SEWER_BASE(TRAIN_SIZE, train=False, SEWER_MEAN=SEWER_MEAN, SEWER_STD=SEWER_STD)
 
     # Load CSVs
     train_all = pd.read_csv(TRAIN_CSV)
@@ -281,7 +285,7 @@ def main():
             df_candidates=defneg_cand,
             images_dir=TRAIN_IMAGES,
             model=model,
-            transform=eval_tf,  # deterministic mining
+            transform=mine_tf,  # deterministic mining
             device=device,
             k=target_defneg,
             batch_size=MINE_BATCH_SIZE,
@@ -408,7 +412,7 @@ def main():
                 optimizer=optimizer,
                 scaler=scaler if USE_AMP else None,
                 model_name=MODEL_NAME,
-                img_size=IMG_SIZE,
+                img_size=TRAIN_SIZE,
                 labels=LOW_F1_LABELS,
                 thresholds=thr,
                 macro_f1=macro_f1,

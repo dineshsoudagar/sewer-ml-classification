@@ -1,3 +1,9 @@
+# eval_e2e_stage1_stage2_stage3_fusion.py
+# Stage1 + Stage2 + Stage3 fusion evaluation on VAL (labeled CSV).
+# NEW POLICY (two-tier Stage-3):
+#   A) Rescue rows (Stage1=defect path AND Stage2 predicts ALL-ZERO): apply Stage-3 with ALL 5 tail labels using normal t3.
+#   B) Global add on entire dataset: Stage-3 may add ONLY FO+IS, but at a VERY HIGH threshold (t3_hi).
+
 import os
 import re
 import json
@@ -22,28 +28,28 @@ CSV_PATH = r"D:\expandAI-hiring\expandai-hiring-sewer\SewerML_Val_jpg.csv"
 IMAGES_DIR = r"D:\expandAI-hiring\expandai-hiring-sewer\test_images"
 
 # ---- Stage 1 ----
-STAGE1_CKPT = r"D:\expandAI-hiring\expandai-hiring-sewer\sewer-ml-classification\dinov3_2_stage\outputs_stage1_vit_samll_plus_img_448\epoch06_f1_0.92541_acc_0.93288.pt"
+STAGE1_CKPT = r"D:\expandAI-hiring\expandai-hiring-sewer\sewer-ml-classification\dinov3_2_stage\outputs_stage1_vit_samll_plus_img_384\epoch05_f1_0.92718_acc_0.93508.pt"
 STAGE1_THRESHOLD_TXT = r"D:\expandAI-hiring\expandai-hiring-sewer\sewer-ml-classification\dinov3_2_stage\outputs_stage1_vit_samll_plus_img_384\best_threshold.txt"
 STAGE1_OUTPUT_MODE = "ND"  # "ND" or "DEFECT_PRESENT"
 MODEL_NAME_STAGE_1 = "vit_small_plus_patch16_dinov3.lvd1689m"
-IMG_SIZE_STAGE1 = 448
+IMG_SIZE_STAGE1 = 384
 BATCH_SIZE_STAGE1 = 64
 
 # ---- Stage 2 ----
-STAGE2_CKPT = r"D:\expandAI-hiring\expandai-hiring-sewer\sewer-ml-classification\dinov3_2_stage\outputs_stage2_vit_base_fn_tnd_on_384\epoch12_macroF1_0.73492_microF1_0.80464_fn_tnd_on_384.pt"
-STAGE2_THRESHOLD_JSON = r"D:\expandAI-hiring\expandai-hiring-sewer\sewer-ml-classification\dinov3_2_stage\outputs_stage2_vit_base_fn_tnd_on_384\best_thresholds_epoch12_macroF1_0.73492_microF1_0.80464_fn_tnd_on_384.json"
+STAGE2_CKPT = r"D:\expandAI-hiring\expandai-hiring-sewer\sewer-ml-classification\dinov3_2_stage\outputs_stage2_vit_base_fn_tnd_on_384\epoch14_macroF1_0.73940_microF1_0.80718.pt"
+STAGE2_THRESHOLD_JSON = r"D:\expandAI-hiring\expandai-hiring-sewer\sewer-ml-classification\dinov3_2_stage\outputs_stage2_vit_base_fn_tnd_on_384\best_thresholds_epoch14_macroF1_0.73940_microF1_0.80718.json"
 MODEL_NAME_STAGE_2 = "vit_base_patch16_dinov3.lvd1689m"
 IMG_SIZE_STAGE2 = 384
 BATCH_SIZE_STAGE2 = 64
 
-# ---- Stage 3 ---- (your tail specialist)
+# ---- Stage 3 ---- (tail specialist)
 STAGE3_CKPT = r"D:\expandAI-hiring\expandai-hiring-sewer\sewer-ml-classification\dinov3_2_stage\outputs_stage3_low_labels_384\best.pt"
 STAGE3_THRESHOLD_JSON = r"D:\expandAI-hiring\expandai-hiring-sewer\sewer-ml-classification\dinov3_2_stage\outputs_stage3_low_labels_384\stage3_thresholds_val_nd0.json"
 MODEL_NAME_STAGE_3 = "vit_small_patch16_dinov3.lvd1689m"
 IMG_SIZE_STAGE3 = 384
 BATCH_SIZE_STAGE3 = 64
 
-# Stage-3 label order (must match how you trained stage3 head)
+# Stage-3 label order (must match stage3 head order)
 STAGE3_LABELS = ["FO", "RB", "IS", "DE", "IN"]
 
 # Full label space (for scoring/export)
@@ -54,7 +60,7 @@ LABELS = [
 ND_LABEL = "ND"
 LABELS_WO_ND = [l for l in LABELS if l != ND_LABEL]
 
-# Stage2 head order (you confirmed)
+# Stage2 head order (confirmed)
 STAGE2_LABELS = [
     "RB", "OB", "PF", "DE", "FS", "IS", "RO", "IN", "AF", "BE",
     "FO", "GR", "PH", "PB", "OS", "OP", "OK", "VA"
@@ -64,19 +70,17 @@ NUM_WORKERS = 8
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 USE_AMP_EVAL = True
 
-OUT_ROOT = "e2e_exports_stage1_stage2_stage3_fusion"
+# Output folder
+OUT_ROOT = "e2e_exports_stage1_stage2_stage3_fusion__all5_rescue__global_FOIS_hi"
 
 # ------------------------------
-# Stage-3 fusion options (DEFAULTS)
+# NEW: Global Stage-3 add policy (applies on entire dataset)
 # ------------------------------
-# We will evaluate multiple combinations automatically; these are just names shown.
-# The fusion function below supports:
-#   - ungate_nd
-#   - override
-#   - stage2_all_zero_rescue
-#   - only_adds
-#   - require_stage1_defect_for_stage3 (recommended True)
-# You can add more toggles if needed.
+STAGE3_GLOBAL_ADD_LABELS = ["FO", "IS"]
+STAGE3_GLOBAL_HI_FLOOR = 0.99               # try 0.98 / 0.99 / 0.995
+STAGE3_GLOBAL_REQUIRE_STAGE2_MISS = True    # safer: only add if stage2 missed that class
+STAGE3_GLOBAL_APPLY_ON_ALL_ROWS = True      # entire dataset (includes stage1 ND-gated rows)
+
 # =========================
 
 
@@ -240,23 +244,32 @@ def fuse_stage3(
     p3: np.ndarray,               # [N,5]
     t_nd: float,
     t2: np.ndarray,               # [18]
-    t3: np.ndarray,               # [5]
+    t3: np.ndarray,               # [5] normal thresholds
     only_adds: bool,
     ungate_nd: bool,
     override: bool,
     stage2_all_zero_rescue: bool,
     require_stage1_defect_for_stage3: bool = True,
+    # NEW:
+    t3_hi: np.ndarray | None = None,             # [5] high-confidence thresholds
+    global_add_labels: list[str] | None = None,  # e.g. ["FO","IS"]
+    global_apply_on_all_rows: bool = True,
+    global_require_stage2_miss: bool = True,
 ) -> np.ndarray:
     """
-    Fusion policies (all are additive unless you explicitly choose otherwise):
+    Two-tier Stage-3:
+      - Rescue: if stage1 defect path AND stage2 all-zero -> apply stage3 ALL 5 labels using t3.
+      - Global add: add ONLY subset labels using very high thresholds t3_hi (optionally on all rows).
+
+    Existing optional policies:
       - ungate_nd:
-          if stage1 says ND but stage3 fires any tail label -> set ND=0 and emit tail labels
+          if stage1 says ND but stage3 fires any tail label -> set ND=0 and emit tail labels (riskier)
       - override:
-          if p3(c)>=t3(c) and stage2 missed c -> set c=1
-      - stage2_all_zero_rescue:
-          if stage1 says defect but stage2 produced no positives -> use stage3 tail preds
+          if p3(c)>=t3(c) and stage2 missed c -> set c=1 (adds missing tail labels)
       - only_adds:
           stage3 never removes a stage2 positive (recommended True)
+      - require_stage1_defect_for_stage3:
+          prevents stage3 touching ND-gated rows (except global add if enabled)
     """
     out = y_pred_base.copy().astype(np.int32)
 
@@ -268,7 +281,15 @@ def fuse_stage3(
     pred_nd = (p_nd >= t_nd)
     defect_mask = ~pred_nd
 
-    # 1) UNGATE ND
+    # Stage2 per-class predictions (for comparisons)
+    stage2_pred = (p2 >= t2.reshape(1, -1))
+
+    # Optionally prevent stage3 from touching ND-gated rows at all (for normal stage3 ops)
+    stage3_allowed_mask = defect_mask.copy()
+    if not require_stage1_defect_for_stage3:
+        stage3_allowed_mask = np.ones_like(defect_mask, dtype=bool)
+
+    # 1) UNGATE ND (riskier)
     if ungate_nd:
         tail_fire = (p3 >= t3.reshape(1, -1)).any(axis=1)
         ungate_mask = pred_nd & tail_fire
@@ -279,27 +300,18 @@ def fuse_stage3(
                 jF = idx_full[lab]
                 out[ungate_mask, jF] = (p3[ungate_mask, j3] >= t3[j3]).astype(np.int32)
 
-    # Optionally prevent stage3 from touching ND-gated rows at all
-    stage3_allowed_mask = defect_mask.copy()
-    if not require_stage1_defect_for_stage3:
-        stage3_allowed_mask = np.ones_like(defect_mask, dtype=bool)
-
-    # Stage2 per-class predictions (for override comparisons)
-    stage2_pred = (p2 >= t2.reshape(1, -1))
-
-    # 2) STAGE2 ALL-ZERO rescue on defect path
+    # 2) STAGE2 ALL-ZERO rescue on defect path: apply ALL 5 Stage3 labels with normal t3
     if stage2_all_zero_rescue:
-        # all-zero among the 18 stage2 labels
         stage2_any = stage2_pred.any(axis=1)
         rescue_mask = stage3_allowed_mask & (~stage2_any)
         if rescue_mask.any():
             for lab in STAGE3_LABELS:
                 j3 = idx3[lab]
                 jF = idx_full[lab]
-                # set by stage3 threshold
                 out[rescue_mask, jF] = (p3[rescue_mask, j3] >= t3[j3]).astype(np.int32)
+            out[rescue_mask, nd_idx] = 0
 
-    # 3) Per-class override (adds missing tail labels)
+    # 3) Per-class override (adds missing tail labels) using normal t3
     if override:
         for lab in STAGE3_LABELS:
             j2 = idx2.get(lab, None)
@@ -315,11 +327,36 @@ def fuse_stage3(
             if only_adds:
                 out[add_mask, jF] = 1
             else:
-                # if you ever wanted replace logic, you'd implement it here
                 out[add_mask, jF] = 1
 
+            out[add_mask, nd_idx] = 0
+
+    # 4) NEW: Global high-confidence add for FO/IS only, using t3_hi
+    if (t3_hi is not None) and (global_add_labels is not None) and (len(global_add_labels) > 0):
+        if global_apply_on_all_rows:
+            global_mask = np.ones_like(defect_mask, dtype=bool)  # entire dataset (includes ND-gated)
+        else:
+            global_mask = stage3_allowed_mask  # only defect path
+
+        for lab in global_add_labels:
+            if lab not in idx3:
+                continue
+            j3 = idx3[lab]
+            jF = idx_full[lab]
+
+            fire_hi = (p3[:, j3] >= t3_hi[j3])
+
+            if global_require_stage2_miss and (lab in idx2):
+                missed = ~stage2_pred[:, idx2[lab]]
+                add_mask = global_mask & missed & fire_hi
+            else:
+                add_mask = global_mask & fire_hi
+
+            out[add_mask, jF] = 1
+            out[add_mask, nd_idx] = 0  # if we add any defect -> ND must be 0
+
     # Safety: if any defect label set on a row, ND must be 0
-    any_def = out[:, :nd_idx].sum(axis=1) + out[:, nd_idx+1:].sum(axis=1)
+    any_def = out[:, :nd_idx].sum(axis=1)  # ND is last, so this is all defects
     out[any_def > 0, nd_idx] = 0
 
     return out
@@ -364,9 +401,18 @@ def main():
     else:
         raise ValueError(f"Unknown STAGE1_OUTPUT_MODE: {STAGE1_OUTPUT_MODE}")
 
+    # NEW: build t3_hi for global FO/IS add
+    t3_hi = t3_pc.copy()
+    for lab in STAGE3_GLOBAL_ADD_LABELS:
+        j = STAGE3_LABELS.index(lab)
+        t3_hi[j] = max(float(t3_hi[j]), float(STAGE3_GLOBAL_HI_FLOOR))
+
     print(f"[Stage1] t_nd={t_nd:.6f}")
     print(f"[Stage2] loaded per-class thresholds for {len(STAGE2_LABELS)} labels")
     print(f"[Stage3] loaded per-class thresholds for {len(STAGE3_LABELS)} labels")
+    print(f"[Stage3] global-add labels={STAGE3_GLOBAL_ADD_LABELS} hi_floor={STAGE3_GLOBAL_HI_FLOOR} require_s2_miss={STAGE3_GLOBAL_REQUIRE_STAGE2_MISS} all_rows={STAGE3_GLOBAL_APPLY_ON_ALL_ROWS}")
+    print(f"[Stage3] t3 (normal): { {lab: float(t) for lab, t in zip(STAGE3_LABELS, t3_pc.tolist())} }")
+    print(f"[Stage3] t3_hi:      { {lab: float(t) for lab, t in zip(STAGE3_LABELS, t3_hi.tolist())} }")
 
     # ---- loaders per stage (supports different image sizes / batch sizes) ----
     ds_s1 = SewerMLFullDataset(CSV_PATH, IMAGES_DIR, LABELS, transform=SimpleTransform(IMG_SIZE_STAGE1, train=False))
@@ -399,13 +445,13 @@ def main():
 
     # ---- base preds ----
     y_base = build_stage1_stage2_preds(p_nd, p2, t_nd, t2_pc)
-    macro_base, micro_base, f1_base = f1_macro_micro(y_true_full, y_base)
+    macro_base, micro_base, _ = f1_macro_micro(y_true_full, y_base)
     print("\n========== BASE (Stage1+Stage2) ==========")
     print(f"macro_f1={macro_base:.6f} micro_f1={micro_base:.6f}")
 
     # ---- evaluate fusion variants ----
-    # We evaluate a small but meaningful grid. You can expand this list.
     variants = []
+
     def add_variant(name, only_adds, ungate_nd, override, allzero):
         variants.append({
             "name": name,
@@ -413,18 +459,18 @@ def main():
             "ungate_nd": ungate_nd,
             "override": override,
             "allzero": allzero,
-            "require_stage1_defect_for_stage3": True,  # keep this True for sanity
+            "require_stage1_defect_for_stage3": True,  # keep True for normal stage3 ops
         })
 
-    # Minimal, safe:
-    add_variant("S3_override_only_adds", True, False, True, False)
+    # Minimal / safe core set (your best earlier was usually allzero rescue)
     add_variant("S3_allzero_rescue_only_adds", True, False, False, True)
-    add_variant("S3_override+allzero_only_adds", True, False, True, True)
 
-    # With ungate (riskier but can add recall on gated FNs):
+    # Optional comparisons:
     add_variant("S3_ungate_only", True, True, False, False)
-    add_variant("S3_ungate+override", True, True, True, False)
     add_variant("S3_ungate+allzero", True, True, False, True)
+    add_variant("S3_override_only_adds", True, False, True, False)
+    add_variant("S3_override+allzero_only_adds", True, False, True, True)
+    add_variant("S3_ungate+override", True, True, True, False)
     add_variant("S3_ungate+override+allzero", True, True, True, True)
 
     results = []
@@ -440,8 +486,13 @@ def main():
             override=v["override"],
             stage2_all_zero_rescue=v["allzero"],
             require_stage1_defect_for_stage3=v["require_stage1_defect_for_stage3"],
+            # NEW global add:
+            t3_hi=t3_hi,
+            global_add_labels=STAGE3_GLOBAL_ADD_LABELS,
+            global_apply_on_all_rows=STAGE3_GLOBAL_APPLY_ON_ALL_ROWS,
+            global_require_stage2_miss=STAGE3_GLOBAL_REQUIRE_STAGE2_MISS,
         )
-        macro, micro, f1pc = f1_macro_micro(y_true_full, y_fused)
+        macro, micro, _ = f1_macro_micro(y_true_full, y_fused)
 
         results.append({
             "name": v["name"],
@@ -453,7 +504,6 @@ def main():
             "allzero": v["allzero"],
         })
 
-    # rank by macro (change to micro if you want)
     results_sorted = sorted(results, key=lambda r: r["macro_f1"], reverse=True)
 
     print("\n========== FUSION VARIANTS (ranked by macro_f1) ==========")
@@ -464,7 +514,7 @@ def main():
         )
     print("==========================================================\n")
 
-    # Save best K CSVs and a summary json
+    # Save best K CSVs and summary json
     best_pack = []
     for i, r in enumerate(results_sorted[:topk_to_save]):
         v = next(x for x in variants if x["name"] == r["name"])
@@ -477,6 +527,11 @@ def main():
             override=v["override"],
             stage2_all_zero_rescue=v["allzero"],
             require_stage1_defect_for_stage3=v["require_stage1_defect_for_stage3"],
+            # NEW global add:
+            t3_hi=t3_hi,
+            global_add_labels=STAGE3_GLOBAL_ADD_LABELS,
+            global_apply_on_all_rows=STAGE3_GLOBAL_APPLY_ON_ALL_ROWS,
+            global_require_stage2_miss=STAGE3_GLOBAL_REQUIRE_STAGE2_MISS,
         )
 
         out_csv = os.path.join(run_dir, f"pred_e2e_{i+1:02d}_{r['name']}_macro_{_float_tag(r['macro_f1'])}.csv")
@@ -509,7 +564,14 @@ def main():
             "ckpt": os.path.basename(STAGE3_CKPT),
             "img_size": IMG_SIZE_STAGE3,
             "labels": STAGE3_LABELS,
-            "thresholds": {lab: float(t) for lab, t in zip(STAGE3_LABELS, t3_pc.tolist())},
+            "thresholds_t3": {lab: float(t) for lab, t in zip(STAGE3_LABELS, t3_pc.tolist())},
+            "thresholds_t3_hi": {lab: float(t) for lab, t in zip(STAGE3_LABELS, t3_hi.tolist())},
+            "global_add": {
+                "labels": STAGE3_GLOBAL_ADD_LABELS,
+                "hi_floor": float(STAGE3_GLOBAL_HI_FLOOR),
+                "require_stage2_miss": bool(STAGE3_GLOBAL_REQUIRE_STAGE2_MISS),
+                "apply_on_all_rows": bool(STAGE3_GLOBAL_APPLY_ON_ALL_ROWS),
+            },
         },
         "base_stage1_stage2": {
             "macro_f1": float(macro_base),
@@ -526,6 +588,7 @@ def main():
     print("  - summary_stage1_stage2_stage3.json")
     for bp in best_pack:
         print(f"  - {bp['csv']}")
+
 
 if __name__ == "__main__":
     main()
